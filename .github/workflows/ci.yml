@@ -1,0 +1,67 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Fix corrupted go.sum
+        run: |
+          Remove-Item src/backend/user-service/go.sum -Force -ErrorAction SilentlyContinue
+
+      - name: Download dependencies
+        run: |
+          $env:GOPROXY = "https://proxy.golang.org,direct"
+          $env:GOSUMDB = "off"
+          $env:HTTP_PROXY = "http://127.0.0.1:1081"
+          $env:HTTPS_PROXY = "http://127.0.0.1:1081"
+          $env:NO_PROXY = "localhost,127.0.0.1"
+          cd src/backend/user-service
+          go mod download -x
+
+      - name: Build binary
+        run: |
+          $env:CGO_ENABLED = "0"
+          $env:GOOS = "linux"
+          $env:GOPROXY = "https://proxy.golang.org,direct"
+          $env:GOSUMDB = "off"
+          $env:HTTP_PROXY = "http://127.0.0.1:1081"
+          $env:HTTPS_PROXY = "http://127.0.0.1:1081"
+          $env:NO_PROXY = "localhost,127.0.0.1"
+          cd src/backend/user-service
+          go build -mod=mod -o user-service ./cmd
+
+      - name: Log in to Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build Docker image
+        run: docker build -t ghcr.io/${{ github.repository }}/user-service:latest ./src/backend/user-service
+
+      - name: Push Docker image
+        run: docker push ghcr.io/${{ github.repository }}/user-service:latest
+
+  deploy:
+    runs-on: self-hosted
+    needs: build
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy user-service
+        run: kubectl set image deployment/user-service user-service=ghcr.io/techshared/tongxingzhe/user-service:latest -n tongxingzhe-dev
