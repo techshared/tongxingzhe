@@ -62,6 +62,22 @@ func (s *AuthService) Login(ctx context.Context, phone, code string) (*model.Aut
 		}
 	}
 	
+	// In dev mode without DB: create mock user
+	if s.db == nil {
+		return &model.AuthResponse{
+			AccessToken:  "dev-token-" + phone,
+			RefreshToken: "dev-refresh-" + phone,
+			ExpiresIn:   86400,
+			TokenType:   "Bearer",
+			User: &model.User{
+				ID:       uuid.New(),
+				Phone:    phone,
+				Nickname: "DevUser_" + phone[len(phone)-4:],
+				RLevel:   "R1",
+			},
+		}, nil
+	}
+
 	// Get or create user
 	user, err := s.db.GetUserByPhone(phone)
 	if err != nil {
