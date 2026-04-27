@@ -15,7 +15,11 @@ FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # nginx config for SPA + API proxy
-RUN echo 'server { listen 80; root /usr/share/nginx/html; index index.html; 
+RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
     location /api/ {
         proxy_pass http://user-service:8080;
         proxy_http_version 1.1;
@@ -27,7 +31,8 @@ RUN echo 'server { listen 80; root /usr/share/nginx/html; index index.html;
     location / {
         try_files $uri $uri/ /index.html;
     }
-}' > /etc/nginx/conf.d/default.conf
+}
+EOF
 
 EXPOSE 80
 
